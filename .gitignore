@@ -265,5 +265,10 @@ config.ini
 # Generated web UI bundle (built by scripts/build_webui.py)
 src/camoufox_pm/webui/
 
+# Sidecar binaries (keep folder structure and documentation)
+resources/bin/*
+!resources/bin/.gitkeep
+!resources/bin/README.md
+
 # Keep the committed PyInstaller spec
 !packaging/*.spec

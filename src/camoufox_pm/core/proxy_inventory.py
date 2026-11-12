@@ -25,9 +25,9 @@ from .proxy_import import normalize_proxy_server
 
 _PUBLIC_COLUMNS = (
     "id, name, type, server, username, country, row_version, last_check, "
-    "created_at, updated_at, (password IS NOT NULL AND password != '') AS has_password"
+    "created_at, updated_at, (password IS NOT NULL AND password != '') AS has_password, node_link"
 )
-_CONFIG_FIELDS = frozenset({"type", "server", "username", "password", "country"})
+_CONFIG_FIELDS = frozenset({"type", "server", "username", "password", "country", "node_link"})
 
 
 class ProxyNotFound(ValueError):
@@ -108,7 +108,7 @@ class ProxyInventory:
 
     def _secret_config(self, proxy_id: str, expected_version: int | None = None) -> ProxyConfig:
         row = self.connection.execute(
-            "SELECT type, server, username, password, country, row_version "
+            "SELECT id, name, type, server, username, password, country, row_version, node_link "
             "FROM proxy_inventory WHERE id = ?",
             (proxy_id,),
         ).fetchone()
@@ -117,11 +117,14 @@ class ProxyInventory:
         if expected_version is not None and row["row_version"] != expected_version:
             raise StaleWriteError(proxy_id, expected_version)
         return ProxyConfig(
+            name=row["name"] if "name" in row.keys() else None,
+            proxy_id=row["id"] if "id" in row.keys() else None,
             type=row["type"],
             server=row["server"],
             username=row["username"],
             password=_clear_password(row["password"]),
             country=row["country"],
+            node_link=row["node_link"] if "node_link" in row.keys() else None,
         )
 
     async def list(self) -> builtins.list[dict]:
@@ -138,14 +141,15 @@ class ProxyInventory:
         )
         config.server = normalize_proxy_server(config.server)
         config.validate_authentication()
-        if config.password and not config.username:
-            raise ValueError("A proxy password requires a username")
+        if config.type in {ProxyType.HTTP, ProxyType.HTTPS, ProxyType.SOCKS4, ProxyType.SOCKS5}:
+            if config.password and not config.username:
+                raise ValueError("A proxy password requires a username")
         password = _stored_password(config.password)
         with self.connection:
             self.connection.execute(
                 "INSERT INTO proxy_inventory "
-                "(id,name,type,server,username,password,country,created_at,updated_at) "
-                "VALUES (?,?,?,?,?,?,?,?,?)",
+                "(id,name,type,server,username,password,country,node_link,created_at,updated_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
                 (
                     proxy_id,
                     values["name"],
@@ -154,6 +158,7 @@ class ProxyInventory:
                     config.username,
                     password,
                     config.country,
+                    config.node_link,
                     now,
                     now,
                 ),
@@ -170,9 +175,10 @@ class ProxyInventory:
         has_password = (
             bool(changes["password"]) if "password" in changes else current["has_password"]
         )
-        if has_password and not username:
-            raise ValueError("A proxy password requires a username")
         protocol = ProxyType(changes.get("type", current["type"]))
+        if protocol in {ProxyType.HTTP, ProxyType.HTTPS, ProxyType.SOCKS4, ProxyType.SOCKS5}:
+            if has_password and not username:
+                raise ValueError("A proxy password requires a username")
         if protocol == ProxyType.SOCKS4 and (username or has_password):
             raise ValueError(
                 "SOCKS4 username/password authentication is unsupported. Use SOCKS5 instead."
@@ -193,7 +199,7 @@ class ProxyInventory:
             config.validate_authentication()
         columns = []
         values = []
-        for field in ("name", "type", "server", "username", "password", "country"):
+        for field in ("name", "type", "server", "username", "password", "country", "node_link"):
             if field not in changes:
                 continue
             value = changes[field]

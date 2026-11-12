@@ -4,10 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint . --max-warnings=0",
-    "build:static": "next build",
+    "build:static": "next build --webpack",
     "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {

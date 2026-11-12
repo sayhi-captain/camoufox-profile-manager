@@ -131,7 +131,7 @@ def run_desktop(
                     )
                 ui_host = "127.0.0.1" if host in ("0.0.0.0", "127.0.0.1") else host
                 window = webview.create_window(
-                    title, f"http://{ui_host}:{actual_port}/", width=1280, height=800
+                    title, f"http://{ui_host}:{actual_port}/?desktop=1", width=1280, height=800
                 )
                 if window is None:
                     raise RuntimeError("The native window could not be created.")

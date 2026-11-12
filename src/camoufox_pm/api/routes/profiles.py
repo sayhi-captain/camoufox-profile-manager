@@ -552,7 +552,17 @@ async def check_proxy(request: ProxyCheckRequest):
     """Check an unsaved proxy against unsaved settings."""
     await require_admin()
     try:
-        proxy = ProxyConfig(**request.proxy_config) if request.proxy_config else None
+        proxy_config = dict(request.proxy_config) if request.proxy_config else None
+        if proxy_config and proxy_config.get("proxy_id"):
+            inv_proxy = get_profile_manager()._load_inventory_proxy_config(proxy_config["proxy_id"])
+            if inv_proxy:
+                if not proxy_config.get("password") and inv_proxy.password:
+                    proxy_config["password"] = inv_proxy.password
+                if not proxy_config.get("name") and inv_proxy.name:
+                    proxy_config["name"] = inv_proxy.name
+                if not proxy_config.get("node_link") and inv_proxy.node_link:
+                    proxy_config["node_link"] = inv_proxy.node_link
+        proxy = ProxyConfig(**proxy_config) if proxy_config else None
         settings = BrowserSettings(**(request.browser_settings or {}))
     except ValidationError as e:
         raise ApiError(422, validation_message(e.errors()), details=e.errors()) from e

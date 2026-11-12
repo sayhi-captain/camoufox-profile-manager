@@ -61,13 +61,21 @@ class ProxyType(str, Enum):
     HTTPS = "https"
     SOCKS4 = "socks4"
     SOCKS5 = "socks5"
+    VLESS = "vless"
+    VMESS = "vmess"
+    TROJAN = "trojan"
+    SHADOWSOCKS = "shadowsocks"
 
     @classmethod
     def _missing_(cls, value):
         # Persist the existing canonical values so older databases and managers
         # never encounter a new enum merely because an import used an alias.
         return (
-            {"socks4a": cls.SOCKS4, "socks5h": cls.SOCKS5}.get(value)
+            {
+                "socks4a": cls.SOCKS4,
+                "socks5h": cls.SOCKS5,
+                "ss": cls.SHADOWSOCKS,
+            }.get(value)
             if isinstance(value, str)
             else None
         )
@@ -85,11 +93,14 @@ class WebRTCMode(str, Enum):
 class ProxyConfig(BaseModel):
     """Proxy configuration."""
 
+    name: str | None = None
+    proxy_id: str | None = None
     type: ProxyType
     server: str
     username: str | None = None
     password: str | None = None
     country: str | None = None
+    node_link: str | None = None
 
     def validate_authentication(self) -> None:
         from .socks_relay import validate_credentials
@@ -100,8 +111,9 @@ class ProxyConfig(BaseModel):
             )
         if self.type == ProxyType.SOCKS5 and (self.username or self.password):
             validate_credentials(self.username, self.password)
-        if self.password and not self.username:
-            raise ValueError("A proxy password requires a username")
+        if self.type in {ProxyType.HTTP, ProxyType.HTTPS, ProxyType.SOCKS4, ProxyType.SOCKS5}:
+            if self.password and not self.username:
+                raise ValueError("A proxy password requires a username")
 
     def to_camoufox_format(self) -> dict[str, str]:
         """Convert to the proxy dict Camoufox/Playwright expects."""
@@ -111,6 +123,8 @@ class ProxyConfig(BaseModel):
             config["username"] = self.username
         if self.password:
             config["password"] = self.password
+        if self.node_link:
+            config["node_link"] = self.node_link
         return config
 
 
@@ -243,6 +257,7 @@ class ProxyCheckRecord(BaseModel):
     country: str | None = None
     timezone: str | None = None
     findings: list[ProxyCheckFinding] = Field(default_factory=list)
+    ipv6: str | None = None
 
 
 def normalize_tags(values: Any) -> list[str]:

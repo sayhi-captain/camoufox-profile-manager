@@ -403,6 +403,7 @@ class ProxyLocationResponse(BaseModel):
     timezone: str | None = None
     latitude: float | None = None
     longitude: float | None = None
+    ipv6: str | None = None
 
 
 class ProxyFindingResponse(BaseModel):

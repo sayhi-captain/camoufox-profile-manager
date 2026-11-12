@@ -295,6 +295,7 @@ class BrowserSession:
         camoufox: Any,
         process_id: int | None = None,
         socks_relay: SocksRelay | None = None,
+        proxy_bridge: Any | None = None,
     ):
         self.profile_id = profile_id
         self.camoufox = camoufox  # AsyncCamoufox context manager instance
@@ -306,6 +307,7 @@ class BrowserSession:
         self.on_stopped: ExitHandler | None = None
         self._terminated = False
         self.socks_relay = socks_relay
+        self.proxy_bridge = proxy_bridge
         self._termination_task: asyncio.Task[None] | None = None
         self.context: Any = None
 
@@ -326,6 +328,14 @@ class BrowserSession:
         self._owned_processes.refresh()
         cancelled = False
         sdk_close_failed = False
+        if self.proxy_bridge is not None:
+            try:
+                await self.proxy_bridge.close()
+            except asyncio.CancelledError:
+                cancelled = True
+            except Exception as exc:
+                logger.warning(f"Proxy bridge close failed: {type(exc).__name__}")
+
         if self.socks_relay is not None:
             try:
                 await self.socks_relay.close()
@@ -487,6 +497,7 @@ class BrowserSessionManager:
         # may hand its lease away.
         self._starting[profile_id] = self._starting.get(profile_id, 0) + 1
         relay: SocksRelay | None = None
+        bridge = None
         camoufox = None
         cookie_directory: Path | None = None
         pending_cookies = None
@@ -495,7 +506,20 @@ class BrowserSessionManager:
                 options = _browser_launch_options(launch_options)
                 proxy = options.get("proxy") or {}
                 server = proxy.get("server", "")
-                if server.startswith("socks4://") or (
+                is_bridged = (
+                    server.startswith(("vless://", "vmess://", "trojan://", "ss://", "shadowsocks://"))
+                    or proxy.get("type") in {"vless", "vmess", "trojan", "shadowsocks"}
+                    or proxy.get("node_link")
+                )
+                if is_bridged:
+                    from .proxy_bridge import ProxyBridge, bridge_manager
+
+                    bridge = ProxyBridge(proxy, tag=f"profile-{profile_id}")
+                    await bridge.start()
+                    bridge_manager.active_bridges[profile_id] = bridge
+                    options["proxy"] = bridge.browser_proxy
+                    server = options["proxy"]["server"]
+                elif server.startswith("socks4://") or (
                     server.startswith("socks5://")
                     and (proxy.get("username") or proxy.get("password"))
                 ):
@@ -504,6 +528,7 @@ class BrowserSessionManager:
                     )
                     await relay.start()
                     options["proxy"] = relay.browser_proxy
+                    server = options["proxy"]["server"]
                 if server.startswith(("socks4://", "socks5://")):
                     prefs = dict(options.get("firefox_user_prefs") or {})
                     prefs["network.proxy.socks_remote_dns"] = True
@@ -525,7 +550,9 @@ class BrowserSessionManager:
                 raise BrowserLaunchError(f"Failed to launch browser: {exc}") from exc
 
             process_id = _resolve_process_id(browser) or _resolve_process_id(camoufox)
-            session = BrowserSession(profile_id, camoufox, process_id, socks_relay=relay)
+            session = BrowserSession(
+                profile_id, camoufox, process_id, socks_relay=relay, proxy_bridge=bridge
+            )
             # Expose the ready Playwright context; automation never reaches into
             # AsyncCamoufox internals or passes destination URLs at startup.
             session.context = browser
@@ -536,7 +563,11 @@ class BrowserSessionManager:
             # Keep the starting marker until both browser and relay teardown
             # finish. Cancelling the request must not release a live profile.
             failed_session = BrowserSession(
-                profile_id, camoufox, _resolve_process_id(camoufox), socks_relay=relay
+                profile_id,
+                camoufox,
+                _resolve_process_id(camoufox),
+                socks_relay=relay,
+                proxy_bridge=bridge,
             )
             try:
                 await failed_session.terminate()

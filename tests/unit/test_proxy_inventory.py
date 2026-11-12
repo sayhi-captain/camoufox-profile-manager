@@ -10,7 +10,7 @@ from cryptography.fernet import Fernet
 from camoufox_pm.config import get_settings
 from camoufox_pm.core import proxy_check, proxy_inventory
 from camoufox_pm.core.database import StaleWriteError, StorageManager
-from camoufox_pm.core.models import ProxyConfig
+from camoufox_pm.core.models import ProxyConfig, ProxyType
 from camoufox_pm.core.profile_manager import ProfileManager
 from camoufox_pm.core.proxy_inventory import ProxyCredentialsUnavailable, ProxyInventory
 
@@ -318,3 +318,41 @@ async def test_assignment_does_not_use_another_holders_replaced_lease(inventory,
     assert result["assigned"] == [] and result["skipped"][0]["id"] == profile.id
     assert (await inventory.storage.get_profile(profile.id)).proxy is None
     assert (await inventory.storage.get_lease(profile.id))[0] == "new-browser-holder"
+
+
+@pytest.mark.asyncio
+async def test_vless_node_link_create_and_update(inventory):
+    link = "vless://a3b68078-d428-48fe-a78b-4b2a33f44534@1.2.3.4:443?security=reality&sni=yahoo.com#MyVLESS"
+    vless_data = {
+        "name": "My VLESS Node",
+        "type": "vless",
+        "server": "1.2.3.4:443",
+        "username": "a3b68078-d428-48fe-a78b-4b2a33f44534",
+        "node_link": link,
+    }
+    created = await inventory.create(vless_data)
+    assert created["type"] == "vless"
+    assert created["server"] == "1.2.3.4:443"
+    assert created["node_link"] == link
+
+    secret = inventory._secret_config(created["id"])
+    assert secret.type == ProxyType.VLESS
+    assert secret.node_link == link
+
+    updated = await inventory.update(created["id"], {"name": "Updated VLESS"}, 0)
+    assert updated["name"] == "Updated VLESS"
+    assert updated["node_link"] == link
+
+
+@pytest.mark.asyncio
+async def test_assign_proxy_preserves_proxy_name_and_id(inventory):
+    proxy = await inventory.create({"name": "HK Premium", "type": "socks5", "server": "1.2.3.4:1080"})
+    profile = await inventory.manager.create_profile("target", generate_fingerprint=False)
+    res = await inventory.assign(proxy["id"], [{"id": profile.id, "row_version": 0}], 0)
+    assert res["assigned"] == [profile.id]
+    loaded = await inventory.storage.get_profile(profile.id)
+    assert loaded.proxy is not None
+    assert loaded.proxy.name == "HK Premium"
+    assert loaded.proxy.proxy_id == proxy["id"]
+
+

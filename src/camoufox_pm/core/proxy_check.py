@@ -96,6 +96,7 @@ class ProxyLocation:
     timezone: str | None = None
     latitude: float | None = None
     longitude: float | None = None
+    ipv6: str | None = None
 
 
 @dataclass(frozen=True)
@@ -134,6 +135,7 @@ def record(result: ProxyCheckResult, checked_at: datetime | None = None) -> Prox
             ProxyCheckFinding(level=f.level, field=f.field, message=f.message)
             for f in result.findings
         ],
+        ipv6=result.location.ipv6 if result.location else None,
     )
 
 
@@ -183,6 +185,17 @@ def preflight(proxy: ProxyConfig) -> list[Finding]:
             findings.append(
                 Finding(
                     "error", "proxy", "SOCKS5 username and password must each be 1–255 UTF-8 bytes."
+                )
+            )
+    if proxy.type in {ProxyType.VLESS, ProxyType.VMESS, ProxyType.TROJAN, ProxyType.SHADOWSOCKS}:
+        from .proxy_bridge import find_singbox_binary
+
+        if not find_singbox_binary():
+            findings.append(
+                Finding(
+                    "error",
+                    "proxy",
+                    "sing-box executable not found. Please install sing-box to test or launch VLESS/VMess/Trojan nodes.",
                 )
             )
     return findings
@@ -376,6 +389,18 @@ async def resolve_exit_ip(
             stack.push_async_callback(relay.close)
             await relay.start()
             url = relay.browser_proxy["server"]
+        elif proxy and proxy.type in {
+            ProxyType.VLESS,
+            ProxyType.VMESS,
+            ProxyType.TROJAN,
+            ProxyType.SHADOWSOCKS,
+        }:
+            from .proxy_bridge import ProxyBridge
+
+            bridge = ProxyBridge(proxy, tag="check")
+            stack.push_async_callback(bridge.close)
+            await bridge.start(timeout=timeout)
+            url = bridge.browser_proxy["server"]
         streams: list[httpcore.AsyncNetworkStream] = []
 
         async def trace(event: str, info: dict[str, Any]) -> None:
@@ -410,6 +435,64 @@ async def resolve_exit_ip(
             return answer, int((time.monotonic() - started) * 1000)
 
     raise ConnectionError(_readable(last_error, proxy.type if proxy else None))
+
+
+IPV6_ENDPOINTS = (
+    "https://api6.ipify.org",
+)
+
+
+async def resolve_exit_ipv6(
+    proxy: ProxyConfig | None, timeout: float = 3.0
+) -> str | None:
+    """Attempt to resolve the IPv6 exit address through the proxy.
+
+    Returns the IPv6 address if reachable, or None if IPv6 is unsupported or unreachable.
+    """
+    url = proxy_url(proxy) if proxy else None
+    if proxy:
+        try:
+            normalize_proxy_server(proxy.server)
+            proxy.validate_authentication()
+        except ValueError:
+            return None
+
+    try:
+        async with AsyncExitStack() as stack:
+            if proxy and proxy.type == ProxyType.SOCKS4:
+                return None
+            elif proxy and proxy.type in {
+                ProxyType.VLESS,
+                ProxyType.VMESS,
+                ProxyType.TROJAN,
+                ProxyType.SHADOWSOCKS,
+            }:
+                from .proxy_bridge import ProxyBridge
+
+                bridge = ProxyBridge(proxy, tag="check-v6")
+                stack.push_async_callback(bridge.close)
+                await bridge.start(timeout=timeout)
+                url = bridge.browser_proxy["server"]
+            streams: list[httpcore.AsyncNetworkStream] = []
+
+            async def trace(event: str, info: dict[str, Any]) -> None:
+                if event.endswith(".connect_tcp.complete"):
+                    streams.append(info["return_value"])
+
+            stack.push_async_callback(_close_owned_streams, streams)
+            client = await stack.enter_async_context(httpx.AsyncClient(proxy=url, timeout=timeout))
+            for endpoint in IPV6_ENDPOINTS:
+                try:
+                    answer = await asyncio.wait_for(
+                        _read_exit_address(client, endpoint, trace), timeout=timeout
+                    )
+                    if valid_ipv6(answer):
+                        return answer
+                except Exception:
+                    continue
+    except BaseException as exc:
+        logger.debug(f"IPv6 check failed: {type(exc).__name__}")
+    return None
 
 
 def _readable(error: Exception | None, proxy_type: ProxyType | None = None) -> str:
@@ -558,10 +641,27 @@ async def check(
     except ConnectionError as exc:
         return ProxyCheckResult(reachable=False, error=_readable(exc), findings=findings)
 
+    ipv6_addr: str | None = None
+    if valid_ipv6(ip):
+        ipv6_addr = ip
+    else:
+        try:
+            ipv6_addr = await resolve_exit_ipv6(proxy, timeout=min(timeout, 3.0))
+        except BaseException:
+            ipv6_addr = None
+
     try:
         # get_geolocation reads (and may download) the MaxMind database, so keep it
         # off the event loop.
         location = await asyncio.to_thread(locate, ip)
+        location = ProxyLocation(
+            ip=location.ip,
+            country=location.country,
+            timezone=location.timezone,
+            latitude=location.latitude,
+            longitude=location.longitude,
+            ipv6=ipv6_addr,
+        )
     except LocationUnavailable as exc:
         logger.warning(f"Could not place {ip}: {exc}")
         findings.append(
@@ -573,7 +673,10 @@ async def check(
             )
         )
         return ProxyCheckResult(
-            reachable=True, latency_ms=latency, location=ProxyLocation(ip=ip), findings=findings
+            reachable=True,
+            latency_ms=latency,
+            location=ProxyLocation(ip=ip, ipv6=ipv6_addr),
+            findings=findings,
         )
 
     findings.extend(compare(settings, location))

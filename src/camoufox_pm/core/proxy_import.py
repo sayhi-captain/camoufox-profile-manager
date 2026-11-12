@@ -65,6 +65,20 @@ def _credential(value: str | None) -> str | None:
 def _parse_line(line: str) -> ProxyConfig:
     if len(line) > 2048 or any(char.isspace() or ord(char) < 32 for char in line):
         raise ValueError("Proxy lines must be at most 2048 characters without whitespace.")
+    if any(line.lower().startswith(f"{proto}://") for proto in ("vless", "vmess", "trojan", "ss", "shadowsocks")):
+        from .proxy_bridge import parse_node_link
+
+        parsed_node = parse_node_link(line)
+        server = normalize_proxy_server(parsed_node["server"])
+        config = ProxyConfig(
+            type=ProxyType(parsed_node["protocol"]),
+            server=server,
+            username=parsed_node.get("uuid") or parsed_node.get("username"),
+            password=parsed_node.get("password"),
+            node_link=line,
+        )
+        config.validate_authentication()
+        return config
     try:
         parsed = urlsplit(line if "://" in line else "http://" + line)
     except ValueError:

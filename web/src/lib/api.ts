@@ -41,11 +41,14 @@ export interface BrowserSettings {
 }
 
 export interface ProxyConfig {
+  name?: string | null
+  proxy_id?: string | null
   type?: string
   server?: string
   username?: string | null
   password?: string | null
   country?: string | null
+  node_link?: string | null
 }
 
 /** A short description of the machine a profile is pinned to. */
@@ -233,6 +236,7 @@ export interface ProxyLocation {
   timezone: string | null
   latitude: number | null
   longitude: number | null
+  ipv6?: string | null
 }
 
 export interface ProxyFinding {
@@ -261,6 +265,7 @@ export interface ProxyCheckRecord {
   country: string | null
   timezone: string | null
   findings: ProxyFinding[]
+  ipv6?: string | null
 }
 
 /** Saved library credentials are write-only; profiles receive an explicit snapshot. */
@@ -272,6 +277,7 @@ export interface LibraryProxy {
   username: string | null
   country: string | null
   has_password: boolean
+  node_link?: string | null
   row_version: number
   last_check: ProxyCheckRecord | null
   created_at: string

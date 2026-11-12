@@ -98,7 +98,7 @@ test('every literal translation call has entries in every supported catalog', ()
 })
 
 test('visible JSX text uses translations except for product names and technical units', () => {
-  const allowed = new Set(['Camoufox', 'English', 'Windows', 'macOS', 'Linux', 'HTTP', 'HTTPS', 'SOCKS4', 'SOCKS5', 'WebRTC', 'Canvas', 'ms', 'KB ·'])
+  const allowed = new Set(['Camoufox', 'English', 'Windows', 'macOS', 'Linux', 'HTTP', 'HTTPS', 'SOCKS4', 'SOCKS5', 'VLESS', 'VMess', 'Trojan', 'IPv4', 'IPv6', 'IPv4:', 'IPv6:', 'WebRTC', 'Canvas', 'ms', 'KB ·'])
   const sourceRoot = join(process.cwd(), 'src')
   const files = readdirSync(sourceRoot, { recursive: true }) as string[]
   for (const file of files.filter(file => file.endsWith('.tsx'))) {

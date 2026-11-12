@@ -1,15 +1,16 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useAuth } from '@/components/login-gate'
-import { Check, Info, LoaderCircle, RefreshCw, TriangleAlert, X } from 'lucide-react'
+import { Check, ExternalLink, Info, LoaderCircle, RefreshCw, TriangleAlert, X } from 'lucide-react'
 
 import { useI18n } from '@/components/i18n-provider'
 import type { Translator } from '@/lib/i18n'
 import { translateProxyDiagnostic } from '@/lib/diagnostics'
 import { Modal } from '@/components/modal'
 import { proxyAuthenticationError } from '@/lib/proxy-auth'
-import { ProxyProtocolHelp } from '@/components/proxy-protocol-help'
+import { isDesktopClient } from '@/lib/environment'
 import { useToast } from '@/components/toast'
 import {
   hasGeography,
@@ -17,9 +18,11 @@ import {
   OS_LABELS,
   presetsAPI,
   profilesAPI,
+  proxiesAPI,
   type DevicePreset,
   type FingerprintSummary,
   type Group,
+  type LibraryProxy,
   type Profile,
   type ProxyCheck,
 } from '@/lib/api'
@@ -46,6 +49,9 @@ interface FormState {
   proxyServer: string
   proxyUsername: string
   proxyPassword: string
+  proxyNodeLink: string
+  proxyId: string
+  proxyName: string
 }
 
 const EMPTY: FormState = {
@@ -70,6 +76,9 @@ const EMPTY: FormState = {
   proxyServer: '',
   proxyUsername: '',
   proxyPassword: '',
+  proxyNodeLink: '',
+  proxyId: '',
+  proxyName: '',
 }
 
 function fromProfile(profile: Profile): FormState {
@@ -100,6 +109,9 @@ function fromProfile(profile: Profile): FormState {
     proxyServer: proxy.server ?? '',
     proxyUsername: proxy.username ?? '',
     proxyPassword: proxy.password ?? '',
+    proxyNodeLink: proxy.node_link ?? '',
+    proxyId: proxy.proxy_id ?? '',
+    proxyName: proxy.name ?? '',
   }
 }
 
@@ -137,6 +149,8 @@ interface Props {
 
 export function ProfileForm({ open, profile, groups, onClose, onSaved }: Props) {
   const { t, locale } = useI18n()
+  const router = useRouter()
+  const isDesktop = useMemo(() => isDesktopClient(), [])
   const isEdit = profile !== null
   const { canManageAccess } = useAuth()
   const [form, setForm] = useState<FormState>(EMPTY)
@@ -156,6 +170,27 @@ export function ProfileForm({ open, profile, groups, onClose, onSaved }: Props) 
   const [clearingGeography, setClearingGeography] = useState(false)
   const [presets, setPresets] = useState<DevicePreset[]>([])
   const [presetId, setPresetId] = useState('')
+  const [libraryProxies, setLibraryProxies] = useState<LibraryProxy[]>([])
+  const [loadingProxies, setLoadingProxies] = useState(false)
+
+  const loadLibraryProxies = useCallback(async () => {
+    if (!canManageAccess) return
+    setLoadingProxies(true)
+    try {
+      const list = await proxiesAPI.list()
+      setLibraryProxies(list)
+    } catch {
+      // best-effort
+    } finally {
+      setLoadingProxies(false)
+    }
+  }, [canManageAccess])
+
+  useEffect(() => {
+    if (open) {
+      loadLibraryProxies()
+    }
+  }, [open, loadLibraryProxies])
   // The version this form was filled from. Sent with the save so that an edit
   // somebody else made in the meantime is refused instead of being overwritten,
   // and moved on after a refused save so a deliberate second Save can proceed.
@@ -190,6 +225,49 @@ export function ProfileForm({ open, profile, groups, onClose, onSaved }: Props) 
     () => presets.filter((preset) => preset.os === form.os),
     [presets, form.os],
   )
+
+  const selectedProxySource = useMemo(() => {
+    if (form.proxyId) return form.proxyId
+    if (form.proxyServer) {
+      const matched = libraryProxies.find(
+        (p) => p.server === form.proxyServer && p.type === form.proxyType,
+      )
+      if (matched) return matched.id
+      return '__legacy__'
+    }
+    return ''
+  }, [form.proxyId, form.proxyServer, form.proxyType, libraryProxies])
+
+  function handleProxySourceChange(value: string) {
+    if (!value) {
+      setForm((prev) => ({
+        ...prev,
+        proxyId: '',
+        proxyName: '',
+        proxyType: 'socks5',
+        proxyServer: '',
+        proxyUsername: '',
+        proxyPassword: '',
+        proxyNodeLink: '',
+      }))
+      setProxyCheck(null)
+    } else {
+      const p = libraryProxies.find((item) => item.id === value)
+      if (p) {
+        setForm((prev) => ({
+          ...prev,
+          proxyId: p.id,
+          proxyName: p.name,
+          proxyType: p.type,
+          proxyServer: p.server,
+          proxyUsername: p.username || '',
+          proxyPassword: '',
+          proxyNodeLink: p.node_link || '',
+        }))
+        setProxyCheck(null)
+      }
+    }
+  }
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((current) => ({ ...current, [key]: value }))
@@ -239,10 +317,13 @@ export function ProfileForm({ open, profile, groups, onClose, onSaved }: Props) 
   function buildProxy() {
     if (!form.proxyServer.trim()) return null
     return {
+      name: form.proxyName || undefined,
+      proxy_id: form.proxyId || undefined,
       type: form.proxyType,
       server: form.proxyServer.trim(),
       username: form.proxyUsername || undefined,
       password: form.proxyPassword || undefined,
+      node_link: form.proxyNodeLink || undefined,
     }
   }
 
@@ -577,85 +658,129 @@ export function ProfileForm({ open, profile, groups, onClose, onSaved }: Props) 
           title={t('Proxy')}
           hint={t('Leave the server empty for a direct connection.')}
         >
-          <div>
-            <label className="field-label" htmlFor="pf-proxy-type">
-              {t('Type')}
-            </label>
+          <div className="col-span-2 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="field-label mb-0" htmlFor="pf-proxy-source">
+                {t('Select from proxy library')}
+              </label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="btn btn-ghost h-6 px-1.5 text-[11px] text-ink-dim hover:text-ink inline-flex items-center gap-1"
+                  onClick={loadLibraryProxies}
+                  title={t('Refresh proxy library')}
+                  disabled={loadingProxies}
+                >
+                  <RefreshCw size={11} className={loadingProxies ? 'animate-spin' : ''} />
+                  <span>{t('Refresh')}</span>
+                </button>
+                {isDesktop ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose()
+                      router.push('/proxies/')
+                    }}
+                    className="btn btn-ghost h-6 px-2 text-[11px] text-accent hover:underline inline-flex items-center gap-1"
+                  >
+                    <ExternalLink size={11} />
+                    <span>{t('Manage proxy library')}</span>
+                  </button>
+                ) : (
+                  <a
+                    href="/proxies/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn btn-ghost h-6 px-2 text-[11px] text-accent hover:underline inline-flex items-center gap-1"
+                  >
+                    <ExternalLink size={11} />
+                    <span>{t('Manage proxy library')}</span>
+                  </a>
+                )}
+              </div>
+            </div>
+
             <select
-              id="pf-proxy-type"
+              id="pf-proxy-source"
               className="field"
-              value={form.proxyType}
-              onChange={(e) => set('proxyType', e.target.value)}
-              aria-describedby="pf-proxy-type-help"
+              value={selectedProxySource}
+              onChange={(e) => handleProxySourceChange(e.target.value)}
             >
-              <option value="http">HTTP</option>
-              <option value="https">HTTPS</option>
-              <option value="socks4">SOCKS4</option>
-              <option value="socks5">SOCKS5</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="field-label" htmlFor="pf-proxy-server">
-              {t('Server')}
-            </label>
-            <input
-              id="pf-proxy-server"
-              className="field font-mono"
-              value={form.proxyServer}
-              onChange={(e) => set('proxyServer', e.target.value)}
-              placeholder={t('host:port')}
-            />
-          </div>
-
-          <div>
-            <label className="field-label" htmlFor="pf-proxy-user">
-              {t('Username')}
-            </label>
-            <input
-              id="pf-proxy-user"
-              className="field"
-              value={form.proxyUsername}
-              onChange={(e) => set('proxyUsername', e.target.value)}
-              autoComplete="off"
-            />
-          </div>
-
-          <div>
-            <label className="field-label" htmlFor="pf-proxy-pass">
-              {t('Password')}
-            </label>
-            <input
-              id="pf-proxy-pass"
-              type="password"
-              className="field"
-              value={form.proxyPassword}
-              onChange={(e) => set('proxyPassword', e.target.value)}
-              autoComplete="new-password"
-            />
-          </div>
-
-          <ProxyProtocolHelp type={form.proxyType} id="pf-proxy-type-help" className="col-span-2" />
-
-          {authenticationError && <p role="alert" className="col-span-2 text-danger">{t(authenticationError)}</p>}
-
-          {form.proxyType === 'socks5' && <p className="col-span-2 text-ink-dim">{t('SOCKS5 authentication is handled automatically by a local relay. No extension or manual browser setup is needed.')}</p>}
-
-          <div className="col-span-2">
-            <button
-              type="button"
-              className="btn"
-              onClick={handleCheckProxy}
-              disabled={checkingProxy}
-            >
-              {checkingProxy ? (
-                <LoaderCircle size={13} className="animate-spin" />
-              ) : (
-                <RefreshCw size={13} />
+              <option value="">{t('Direct connection (no proxy)')}</option>
+              {selectedProxySource === '__legacy__' && (
+                <option value="__legacy__">
+                  {form.proxyName || t('Existing proxy')} ({form.proxyType}://{form.proxyServer})
+                </option>
               )}
-              {checkingProxy ? t('Checking…') : t('Check proxy')}
-            </button>
-            <ProxyCheckResult result={proxyCheck} />
+              {libraryProxies.length > 0 && (
+                <optgroup label={t('Proxy library')}>
+                  {libraryProxies.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} ({p.type}://{p.server}){p.country ? ` · ${p.country}` : ''}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+
+            {form.proxyServer && (
+              <div className="rounded-md border border-line bg-surface/50 p-2.5 text-[12px] space-y-2 mt-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="font-medium text-ink">{form.proxyName || t('Proxy')}</span>
+                    <span className="ml-2 font-mono text-ink-dim text-[11px]">
+                      {form.proxyType}://{form.proxyServer}
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-accent">
+                    {form.proxyId ? t('Using library proxy') : t('Existing proxy')}
+                  </span>
+                </div>
+
+                {form.proxyType === 'socks5' && (
+                  <p className="text-[11px] text-ink-dim">
+                    {t('SOCKS5 authentication is handled automatically by a local relay. No extension or manual browser setup is needed.')}
+                  </p>
+                )}
+
+                {['vless', 'vmess', 'trojan'].includes(form.proxyType) && (
+                  <p className="text-[11px] text-ink-dim">
+                    {t('This node is bridged automatically by a local sing-box sidecar to an ephemeral SOCKS5 port.')}
+                  </p>
+                )}
+
+                <div className="flex items-center justify-between border-t border-line/60 pt-2">
+                  <button
+                    type="button"
+                    className="btn btn-secondary text-[12px] h-7"
+                    onClick={handleCheckProxy}
+                    disabled={checkingProxy}
+                  >
+                    {checkingProxy ? (
+                      <>
+                        <LoaderCircle
+                          size={12}
+                          aria-hidden="true"
+                          className="animate-spin motion-reduce:animate-none"
+                        />
+                        {t('Checking…')}
+                      </>
+                    ) : (
+                      <>
+                        <Check size={12} aria-hidden="true" />
+                        {t('Check proxy')}
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {proxyCheck && (
+                  <div className="pt-1">
+                    <ProxyCheckResult result={proxyCheck} />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </Section>}
 
@@ -1092,13 +1217,14 @@ function ProxyCheckResult({ result }: { result: ProxyCheck | null }) {
 
   const where = result.location
   const place = [where?.country, where?.timezone].filter(Boolean).join(' · ')
+  const ipText = where?.ipv6 ? (where?.ip ? `IPv4: ${where.ip} · IPv6: ${where.ipv6}` : `IPv6: ${where.ipv6}`) : (where?.ip ? `IPv4: ${where.ip}` : '')
 
   return (
     <div className="mt-2 space-y-1.5">
       <p className="flex items-start gap-1.5 text-ink-muted">
         <Check size={13} className="mt-0.5 shrink-0 text-ok" />
         <span>
-          <span className="font-mono">{t('Exits at {ip}', { ip: where?.ip })}</span>
+          <span className="font-mono break-all">{t('Exits at {ip}', { ip: ipText })}</span>
           {place && <> — {place}</>}
           {result.latency_ms !== null && <> · {result.latency_ms} ms</>}
         </span>

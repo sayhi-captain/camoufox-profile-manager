@@ -20,6 +20,7 @@ class ProxyCreateRequest(BaseModel):
         None, max_length=4096, repr=False, json_schema_extra={"writeOnly": True}
     )
     country: str | None = Field(None, max_length=64)
+    node_link: str | None = Field(None, max_length=8192)
 
     @field_validator("username", "password")
     @classmethod
@@ -42,8 +43,9 @@ class ProxyCreateRequest(BaseModel):
 
     @model_validator(mode="after")
     def paired_credentials(self):
-        if self.password and not self.username:
-            raise ValueError("A proxy password requires a username")
+        if self.type in {ProxyType.HTTP, ProxyType.HTTPS, ProxyType.SOCKS4, ProxyType.SOCKS5}:
+            if self.password and not self.username:
+                raise ValueError("A proxy password requires a username")
         return self
 
 
@@ -58,6 +60,7 @@ class ProxyUpdateRequest(BaseModel):
         None, max_length=4096, repr=False, json_schema_extra={"writeOnly": True}
     )
     country: str | None = Field(None, max_length=64)
+    node_link: str | None = Field(None, max_length=8192)
 
     @field_validator("username", "password")
     @classmethod
@@ -93,6 +96,7 @@ class ProxyResponse(BaseModel):
     server: str
     username: str | None
     country: str | None
+    node_link: str | None = None
     has_password: bool
     row_version: int
     last_check: ProxyCheckRecord | None

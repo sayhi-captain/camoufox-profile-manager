@@ -48,6 +48,14 @@ class ProfileManager:
         self.profiles_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"Initialized ProfileManager with data directory: {self.data_dir}")
 
+    def _load_inventory_proxy_config(self, proxy_id: str):
+        from .proxy_inventory import ProxyInventory
+
+        try:
+            return ProxyInventory(self)._secret_config(proxy_id)
+        except Exception:
+            return None
+
     async def initialize(self):
         """Initialize the profile manager and its database."""
         await self.storage.initialize()
@@ -105,6 +113,16 @@ class ProfileManager:
         # Configure the proxy if provided
         if proxy_config:
             from .models import ProxyConfig
+
+            if proxy_config.get("proxy_id"):
+                inv_proxy = self._load_inventory_proxy_config(proxy_config["proxy_id"])
+                if inv_proxy:
+                    if not proxy_config.get("password") and inv_proxy.password:
+                        proxy_config["password"] = inv_proxy.password
+                    if not proxy_config.get("name") and inv_proxy.name:
+                        proxy_config["name"] = inv_proxy.name
+                    if not proxy_config.get("node_link") and inv_proxy.node_link:
+                        proxy_config["node_link"] = inv_proxy.node_link
 
             profile.proxy = ProxyConfig(**proxy_config)
             profile.proxy.validate_authentication()
@@ -234,6 +252,16 @@ class ProfileManager:
                 elif key == "proxy" and value is not None:
                     if isinstance(value, dict):
                         from camoufox_pm.core.models import ProxyConfig
+
+                        if value.get("proxy_id"):
+                            inv_proxy = self._load_inventory_proxy_config(value["proxy_id"])
+                            if inv_proxy:
+                                if not value.get("password") and inv_proxy.password:
+                                    value["password"] = inv_proxy.password
+                                if not value.get("name") and inv_proxy.name:
+                                    value["name"] = inv_proxy.name
+                                if not value.get("node_link") and inv_proxy.node_link:
+                                    value["node_link"] = inv_proxy.node_link
 
                         value = ProxyConfig(**value)
                     value.validate_authentication()
@@ -1061,6 +1089,9 @@ class ProfileManager:
 
     async def _on_browser_exit(self, profile_id: str) -> None:
         """Record usage when a browser exits on its own (e.g. the user closes it)."""
+        from .proxy_bridge import bridge_manager
+
+        await bridge_manager.stop_bridge(profile_id)
         try:
             await self.storage.log_usage(
                 UsageStats(profile_id=profile_id, action="close_browser", details={"forced": False})
@@ -1070,6 +1101,9 @@ class ProfileManager:
 
     async def close_browser(self, profile_id: str) -> dict[str, Any]:
         """Close the browser running for a profile, and hand its lease back."""
+        from .proxy_bridge import bridge_manager
+
+        await bridge_manager.stop_bridge(profile_id)
         closed = await self.browser_sessions.close_and_release(profile_id)
         if not closed:
             return {

@@ -259,3 +259,25 @@ async def test_every_inventory_route_uses_existing_auth_guard(proxy_client):
     )
     assert login.status_code == 200
     assert (await proxy_client.get("/api/v1/proxies")).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_create_vless_proxy_via_api(proxy_client):
+    link = "vless://a3b68078-d428-48fe-a78b-4b2a33f44534@1.2.3.4:443?security=reality&sni=yahoo.com#MyNode"
+    payload = {
+        "name": "VLESS Reality Node",
+        "type": "vless",
+        "server": "1.2.3.4:443",
+        "username": "a3b68078-d428-48fe-a78b-4b2a33f44534",
+        "node_link": link,
+    }
+    response = await proxy_client.post("/api/v1/proxies", json=payload)
+    assert response.status_code == 201
+    data = response.json()["data"]
+    assert data["type"] == "vless"
+    assert data["server"] == "1.2.3.4:443"
+    assert data["node_link"] == link
+
+    list_res = await proxy_client.get("/api/v1/proxies")
+    assert any(p["id"] == data["id"] and p["node_link"] == link for p in list_res.json()["data"]["proxies"])
+

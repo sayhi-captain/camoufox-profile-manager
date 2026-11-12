@@ -51,8 +51,10 @@ import {
   hasGeography,
   OS_LABELS,
   profilesAPI,
+  proxiesAPI,
   readProxyCheck,
   type Group,
+  type LibraryProxy,
   type Profile,
   type ProfileViewConfig,
   type ProxyCheckRecord,
@@ -109,6 +111,7 @@ export default function ProfilesPage() {
   const [templateFor, setTemplateFor] = useState<Profile | null>(null)
   const [tagsFor, setTagsFor] = useState<Profile[] | null>(null)
   const [batch, setBatch] = useState<{ action: 'launch' | 'close'; targets: BatchTarget[] } | null>(null)
+  const [libraryProxies, setLibraryProxies] = useState<LibraryProxy[]>([])
 
   const toast = useToast()
   const importRef = useRef<HTMLInputElement>(null)
@@ -169,6 +172,7 @@ export default function ProfilesPage() {
     loadProfiles()
     loadGroups()
     loadRunning()
+    proxiesAPI.list().then(setLibraryProxies).catch(() => {})
     const timer = setInterval(loadRunning, 5000)
     return () => clearInterval(timer)
   }, [loadProfiles, loadGroups, loadRunning])
@@ -217,6 +221,14 @@ export default function ProfilesPage() {
   const groupNames = useMemo(
     () => new Map(groups.map((group) => [group.id, group.name])),
     [groups],
+  )
+  const libraryProxyMap = useMemo(
+    () => new Map(libraryProxies.map((p) => [p.id, p.name])),
+    [libraryProxies],
+  )
+  const serverToNameMap = useMemo(
+    () => new Map(libraryProxies.map((p) => [`${p.type}://${p.server}`, p.name])),
+    [libraryProxies],
   )
 
   const visible = useMemo(() => {
@@ -855,6 +867,8 @@ export default function ProfilesPage() {
                     <ProxyCell
                       profile={profile}
                       checking={checkingProxies.has(profile.id)}
+                      libraryProxyMap={libraryProxyMap}
+                      serverToNameMap={serverToNameMap}
                     />
                   </td>
 
@@ -1063,17 +1077,43 @@ export default function ProfilesPage() {
  * second line only exists once there is something to say, so a list nobody has
  * checked looks exactly as it did before.
  */
-function ProxyCell({ profile, checking }: { profile: Profile; checking: boolean }) {
+function ProxyCell({
+  profile,
+  checking,
+  libraryProxyMap,
+  serverToNameMap,
+}: {
+  profile: Profile
+  checking: boolean
+  libraryProxyMap?: Map<string, string>
+  serverToNameMap?: Map<string, string>
+}) {
   const { t } = useI18n()
-  const configured = formatProxyString(profile.proxy_config) || '—'
+  const proxy = profile.proxy_config
+  const configured = formatProxyString(proxy) || '—'
   const check = profile.proxy_check
+  const displayName =
+    proxy?.name ||
+    (proxy?.proxy_id && libraryProxyMap ? libraryProxyMap.get(proxy.proxy_id) : null) ||
+    (proxy?.server && serverToNameMap ? serverToNameMap.get(`${proxy.type || 'http'}://${proxy.server}`) : null)
 
   return (
     // Bounded, because a table cell grows to fit its content: an unreachable
     // proxy reports a whole sentence, and without a cap one dead proxy pushed
     // the row actions off the screen and gave the table a scrollbar.
     <div className="max-w-[280px] leading-tight">
-      <div className="truncate font-mono text-ink-faint">{configured}</div>
+      {displayName ? (
+        <>
+          <div className="truncate font-medium text-ink" title={`${displayName} (${configured})`}>
+            {displayName}
+          </div>
+          <div className="truncate font-mono text-[11px] text-ink-dim">
+            {configured}
+          </div>
+        </>
+      ) : (
+        <div className="truncate font-mono text-ink-faint">{configured}</div>
+      )}
       {checking ? (
         <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-ink-faint">
           <span className="signal-pulse h-1.5 w-1.5 rounded-full bg-signal" />
@@ -1090,10 +1130,13 @@ function ProxyResult({ check }: { check: ProxyCheckRecord }) {
   const { locale } = useI18n()
   const { tone, label, detail } = readProxyCheck(check, locale)
   const dot = tone === 'ok' ? 'bg-ok' : tone === 'warn' ? 'bg-warn' : 'bg-danger'
+  const ipPart = check.ipv6
+    ? (check.ip ? `IPv4: ${check.ip} · IPv6: ${check.ipv6}` : `IPv6: ${check.ipv6}`)
+    : check.ip
   // Latency and country only mean something when the proxy answered; when it did
   // not, the reason is the only thing worth the space.
   const parts = check.reachable
-    ? [check.ip, check.country, check.latency_ms !== null ? `${check.latency_ms} ms` : null]
+    ? [ipPart, check.country, check.latency_ms !== null ? `${check.latency_ms} ms` : null]
     : [check.error]
 
   return (

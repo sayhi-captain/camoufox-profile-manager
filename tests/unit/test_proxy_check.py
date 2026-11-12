@@ -472,3 +472,12 @@ def test_proxy_error_messages_never_echo_credentials():
     ]:
         assert "proxy-secret" not in _readable(error)
         assert "proxy-user" not in _readable(error)
+
+
+def test_proxy_check_record_includes_ipv6():
+    loc = ProxyLocation(ip="1.2.3.4", ipv6="2001:db8::1", country="US")
+    res = proxy_check.ProxyCheckResult(reachable=True, latency_ms=50, location=loc)
+    rec = proxy_check.record(res)
+    assert rec.ip == "1.2.3.4"
+    assert rec.ipv6 == "2001:db8::1"
+

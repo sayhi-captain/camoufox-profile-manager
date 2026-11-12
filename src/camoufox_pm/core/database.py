@@ -117,6 +117,9 @@ class DatabaseManager:
                 ("deleted_at", "TIMESTAMP"),
                 ("tags", "TEXT NOT NULL DEFAULT '[]'"),
             ],
+            "proxy_inventory": [
+                ("node_link", "TEXT"),
+            ],
         }
         for table, columns in added_columns.items():
             cursor = self._connection.execute(f"PRAGMA table_info({table})")
@@ -148,6 +151,7 @@ class DatabaseManager:
                 username TEXT,
                 password TEXT,
                 country TEXT,
+                node_link TEXT,
                 row_version BIGINT NOT NULL DEFAULT 0,
                 last_check TEXT,
                 created_at TIMESTAMP NOT NULL,

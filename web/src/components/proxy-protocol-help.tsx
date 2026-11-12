@@ -9,10 +9,16 @@ export function ProxyProtocolHelp({ type, id, className = '' }: {
 }) {
   const { t } = useI18n()
   return <p id={id} className={`text-ink-dim ${className}`}>
-    {type === 'http' || type === 'https'
-      ? t('HTTP also works with HTTPS websites. Select HTTPS only when your provider supports a TLS connection to the proxy itself.')
-      : type === 'socks5'
-        ? t('SOCKS5 supports username/password authentication. Enter host:port here and credentials in the separate fields.')
-        : t('SOCKS4 uses remote DNS (SOCKS4a). Username/password and IPv6 destinations are unsupported; use SOCKS5 for those.')}
+    {type === 'vless'
+      ? t('VLESS nodes are bridged automatically by a local sing-box sidecar. Supports Reality, TLS and WebSocket.')
+      : type === 'vmess'
+        ? t('VMess nodes are bridged automatically by a local sing-box sidecar. Supports WebSocket and TLS.')
+        : type === 'trojan'
+          ? t('Trojan nodes are bridged automatically by a local sing-box sidecar. Supports TLS connections.')
+          : type === 'http' || type === 'https'
+            ? t('HTTP also works with HTTPS websites. Select HTTPS only when your provider supports a TLS connection to the proxy itself.')
+            : type === 'socks5'
+              ? t('SOCKS5 supports username/password authentication. Enter host:port here and credentials in the separate fields.')
+              : t('SOCKS4 uses remote DNS (SOCKS4a). Username/password and IPv6 destinations are unsupported; use SOCKS5 for those.')}
   </p>
 }

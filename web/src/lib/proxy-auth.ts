@@ -6,6 +6,6 @@ export function proxyAuthenticationError(type: string, username: string, passwor
     const passwordBytes = new TextEncoder().encode(password).length
     if (userBytes < 1 || userBytes > 255 || ((!hasStoredPassword || password) && (passwordBytes < 1 || passwordBytes > 255))) return 'SOCKS5 username and password must each be 1–255 UTF-8 bytes.'
   }
-  if ((password || hasStoredPassword) && !username) return 'A password requires a username. Enter a username or remove the stored password.'
+  if (!['vless', 'vmess', 'trojan', 'shadowsocks'].includes(type) && (password || hasStoredPassword) && !username) return 'A password requires a username. Enter a username or remove the stored password.'
   return null
 }

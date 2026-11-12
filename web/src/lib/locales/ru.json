@@ -1331,5 +1331,20 @@
   "GitHub's download request limit was reached. Wait and retry, or use a GitHub token below.": "Достигнут лимит запросов к загрузкам GitHub. Подождите и повторите попытку или укажите токен GitHub ниже.",
   "GitHub rejected the token. Check that it is valid and has not expired.": "GitHub отклонил токен. Проверьте, что он действителен и срок его действия не истёк.",
   "GitHub refused the request. Check token access or wait before retrying.": "GitHub отклонил запрос. Проверьте права токена или подождите перед повторной попыткой.",
-  "Could not read browser releases from GitHub. Check your connection and retry.": "Не удалось получить список выпусков браузера с GitHub. Проверьте подключение и повторите попытку."
+  "Could not read browser releases from GitHub. Check your connection and retry.": "Не удалось получить список выпусков браузера с GitHub. Проверьте подключение и повторите попытку.",
+  "Quick import node link": "Быстрый импорт ссылки узла",
+  "Paste vless://, vmess:// or trojan:// link": "Вставьте ссылку vless://, vmess:// или trojan://",
+  "Imported {protocol} node: {server}": "Импортирован узел {protocol}: {server}",
+  "This node is bridged automatically by a local sing-box sidecar to an ephemeral SOCKS5 port.": "Этот узел автоматически перенаправляется локальным sing-box на временный порт SOCKS5.",
+  "VLESS nodes are bridged automatically by a local sing-box sidecar. Supports Reality, TLS and WebSocket.": "Узлы VLESS автоматически перенаправляются локальным sing-box. Поддерживаются Reality, TLS и WebSocket.",
+  "VMess nodes are bridged automatically by a local sing-box sidecar. Supports WebSocket and TLS.": "Узлы VMess автоматически перенаправляются локальным sing-box. Поддерживаются WebSocket и TLS.",
+  "Trojan nodes are bridged automatically by a local sing-box sidecar. Supports TLS connections.": "Узлы Trojan автоматически перенаправляются локальным sing-box. Поддерживаются соединения TLS.",
+  "Select from proxy library": "Выбрать из библиотеки прокси",
+  "Direct connection (no proxy)": "Прямое подключение (без прокси)",
+  "Custom manual configuration": "Пользовательская ручная настройка",
+  "Manage proxy library": "Управление библиотекой прокси",
+  "Refresh proxy library": "Обновить библиотеку прокси",
+  "Using library proxy": "Используется прокси из библиотеки",
+  "Password stored in library": "Пароль сохранён в библиотеке",
+  "Existing proxy": "Текущий прокси"
 }

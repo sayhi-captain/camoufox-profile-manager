@@ -47,6 +47,7 @@ export function ProxyAssignment({ proxy, onClose }: { proxy: LibraryProxy; onClo
   function connection(profile: Profile): string {
     const config = profile.proxy_config
     if (!config?.server) return t('Direct connection')
+    if (config.name) return `${config.name} (${config.type || 'http'}://${config.server})`
     try {
       // Older manually entered profile URLs may include userinfo. Do not display it.
       const address = new URL(config.server.includes('://') ? config.server : `${config.type || 'http'}://${config.server}`)

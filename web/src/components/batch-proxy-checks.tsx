@@ -108,7 +108,7 @@ export function BatchProxyChecks({ targets, onClose, onChecked, onChecking }: {
         const health = check ? readProxyCheck(check, locale) : null
         return <li key={row.id} className="px-3 py-2.5">
           <div className="flex flex-wrap items-start justify-between gap-2"><span className="min-w-0 break-words font-medium">{row.name}</span><span className={row.status === 'failed' || health?.tone === 'danger' ? 'text-danger' : health?.tone === 'ok' ? 'text-ok' : health?.tone === 'warn' ? 'text-warn' : 'text-ink-dim'}>{health?.label ?? statusLabel(row.status)}</span></div>
-          {check && <p className="mt-1 text-ink-dim">{check.reachable ? t('Proxy answered') : t('Proxy did not answer')}{check.ip ? ` · ${check.ip}` : ''}{check.latency_ms != null ? ` · ${check.latency_ms} ms` : ''}</p>}
+          {check && <p className="mt-1 text-ink-dim font-mono text-[11px] break-all">{check.reachable ? t('Proxy answered') : t('Proxy did not answer')}{check.ip ? ` · IPv4: ${check.ip}` : ''}{check.ipv6 ? ` · IPv6: ${check.ipv6}` : ''}{check.latency_ms != null ? ` · ${check.latency_ms} ms` : ''}</p>}
           {row.error && <p className="mt-1 break-words text-danger">{t(row.error)}</p>}
         </li>
       })}

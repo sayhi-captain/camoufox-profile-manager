@@ -1196,5 +1196,20 @@
   "GitHub's download request limit was reached. Wait and retry, or use a GitHub token below.": "已达到 GitHub 下载请求上限。请稍后重试，或在下方提供 GitHub 令牌。",
   "GitHub rejected the token. Check that it is valid and has not expired.": "GitHub 拒绝了此令牌。请检查令牌是否有效且尚未过期。",
   "GitHub refused the request. Check token access or wait before retrying.": "GitHub 拒绝了请求。请检查令牌访问权限，或稍后重试。",
-  "Could not read browser releases from GitHub. Check your connection and retry.": "无法从 GitHub 获取浏览器版本信息。请检查网络连接后重试。"
+  "Could not read browser releases from GitHub. Check your connection and retry.": "无法从 GitHub 获取浏览器版本信息。请检查网络连接后重试。",
+  "Quick import node link": "快速导入节点链接",
+  "Paste vless://, vmess:// or trojan:// link": "粘贴 vless://、vmess:// 或 trojan:// 链接",
+  "Imported {protocol} node: {server}": "已导入 {protocol} 节点：{server}",
+  "This node is bridged automatically by a local sing-box sidecar to an ephemeral SOCKS5 port.": "该节点由本地 sing-box 内核自动桥接至临时的本地 SOCKS5 端口。",
+  "VLESS nodes are bridged automatically by a local sing-box sidecar. Supports Reality, TLS and WebSocket.": "VLESS 节点由本地 sing-box 内核自动桥接。支持 Reality、TLS 和 WebSocket。",
+  "VMess nodes are bridged automatically by a local sing-box sidecar. Supports WebSocket and TLS.": "VMess 节点由本地 sing-box 内核自动桥接。支持 WebSocket 和 TLS。",
+  "Trojan nodes are bridged automatically by a local sing-box sidecar. Supports TLS connections.": "Trojan 节点由本地 sing-box 内核自动桥接。支持 TLS 连接。",
+  "Select from proxy library": "从代理库选择",
+  "Direct connection (no proxy)": "直接连接（无代理）",
+  "Custom manual configuration": "自定义手动配置",
+  "Manage proxy library": "管理代理库",
+  "Refresh proxy library": "刷新代理库",
+  "Using library proxy": "已选用代理库代理",
+  "Password stored in library": "密码已安全保存在代理库",
+  "Existing proxy": "当前配置的代理"
 }
